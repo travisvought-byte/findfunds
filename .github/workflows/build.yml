@@ -1,0 +1,23 @@
+name: Build and check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install qrcode==8.2
+      - name: Build the site
+        run: python3 scripts/build.py
+      - name: Committed pages match the data
+        run: git diff --exit-code -- docs
+      - name: Check data and pages
+        run: python3 scripts/check.py
