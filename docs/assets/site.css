@@ -1,0 +1,84 @@
+/* FindFundraisers.org: plain, high-contrast, large type for older visitors. WCAG 2.2 AA. */
+:root{--ink:#1a1d21;--muted:#4a5360;--navy:#183449;--navy-2:#24506f;--paper:#fff;--wash:#f4f1ea;--line:#c9c3b6;--accent:#b4521a;--focus:#ffbf47}
+*{box-sizing:border-box}
+html{font-size:112.5%}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--paper);line-height:1.55}
+a{color:var(--navy-2);text-underline-offset:.15em}
+a:hover{color:var(--navy)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;box-shadow:0 0 0 5px var(--ink)}
+.skip{position:absolute;left:-9999px;top:0;background:var(--navy);color:#fff;padding:.6rem 1rem;z-index:10}
+.skip:focus{left:.5rem;top:.5rem}
+.wrap{max-width:68rem;margin:0 auto;padding:0 1rem}
+.narrow{max-width:44rem}
+.ic{width:1.3em;height:1.3em;flex:none;vertical-align:-.25em}
+h1,h2,h3{line-height:1.25;color:var(--navy)}
+h1{font-size:2rem;margin:1.2rem 0 .6rem}
+h1 .ic,h2 .ic{margin-right:.4rem}
+h2{font-size:1.45rem;margin:2rem 0 .6rem}
+h3{font-size:1.15rem;margin:0 0 .4rem}
+.lead{font-size:1.15rem;color:var(--muted);max-width:44rem}
+.top{background:var(--navy);color:#fff}
+.top-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem;padding-top:.6rem;padding-bottom:.6rem}
+.brand{color:#fff;text-decoration:none;font-size:1.25rem;display:flex;align-items:center;gap:.4rem}
+.brand b{color:#ffd9a8}
+.top nav ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.2rem 1rem}
+.top nav a{color:#fff;display:inline-block;padding:.55rem .2rem;min-height:44px}
+.hero{background:var(--wash);border-bottom:1px solid var(--line);padding:1rem 0 1.5rem}
+.tiles{list-style:none;padding:0;margin:1rem 0 0;display:flex;flex-wrap:wrap;gap:.75rem}
+.tile{display:flex;align-items:center;gap:.6rem;padding:.8rem 1.1rem;min-height:48px;border:2px solid var(--navy);border-radius:10px;background:#fff;color:var(--navy);font-weight:600;text-decoration:none}
+.tile:hover{background:var(--navy);color:#fff}
+.tile.add{border-style:dashed}
+.lent h2{display:flex;align-items:center}
+.finder{background:var(--wash);border:1px solid var(--line);border-radius:12px;padding:1rem 1.2rem;margin:1.5rem 0}
+.finder h2{margin-top:0}
+.zipform{display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:.3rem;margin-bottom:1rem}
+.zipform .field{margin:0}
+label,legend{font-weight:600}
+input,select,textarea{font:inherit;padding:.55rem .7rem;min-height:48px;border:2px solid var(--muted);border-radius:8px;background:#fff;color:var(--ink)}
+#zip{width:8rem}
+button,.btn{font:inherit;font-weight:600;display:inline-flex;align-items:center;gap:.5rem;min-height:48px;padding:.6rem 1.2rem;border-radius:8px;border:2px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer;text-decoration:none}
+button:hover,.btn:hover{background:var(--navy-2);color:#fff}
+.btn.ghost{background:#fff;color:var(--navy)}
+.status{min-height:1.5em;margin:.6rem 0 0;font-weight:600}
+.jump{margin:1rem 0}
+.cards{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(19rem,1fr));gap:1rem}
+.card article{border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:10px;padding:1rem;height:100%;background:#fff}
+.card h3 a{color:var(--navy)}
+.where{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;margin:.2rem 0 .6rem;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:.35rem;background:var(--wash);border:1px solid var(--line);border-radius:999px;padding:.1rem .7rem;color:var(--ink);font-weight:600}
+.dist{font-weight:700;color:var(--ink)}
+.facts{list-style:none;padding:0;margin:0}
+.facts li{display:flex;gap:.5rem;align-items:flex-start;margin:.25rem 0}
+.facts .ic{color:var(--navy-2);margin-top:.15em}
+.note{display:flex;gap:.5rem;align-items:flex-start;background:#fff6e6;border:1px solid #e3b76b;border-radius:8px;padding:.6rem .8rem;margin:.8rem 0 0;font-size:.95rem}
+.note.big{font-size:1.05rem}
+.county{margin-bottom:1rem}
+.crumbs{margin:1rem 0 0;color:var(--muted)}
+.facts-list{margin:1.2rem 0}
+.facts-list .row{display:grid;grid-template-columns:9rem 1fr;gap:1rem;padding:.7rem 0;border-top:1px solid var(--line)}
+.facts-list dt{display:flex;gap:.5rem;align-items:flex-start;font-weight:700;color:var(--navy)}
+.facts-list dd{margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:.8rem;margin:1.5rem 0}
+.flyer-qr{display:none}
+.trust{color:var(--muted);font-size:.95rem;border-top:1px solid var(--line);padding-top:.8rem;margin-top:1.5rem}
+fieldset{border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:0 0 1.2rem}
+.checks{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;margin-bottom:1rem}
+.check{display:flex;align-items:center;gap:.5rem;font-weight:400;min-height:44px}
+.check input{width:24px;height:24px;min-height:0}
+.hint{color:var(--muted);font-size:.95rem;margin:.3rem 0 0}
+.prose li{margin:.3rem 0}
+.foot{margin-top:3rem;background:var(--wash);border-top:1px solid var(--line);padding:1.2rem 0;color:var(--muted)}
+.foot a{color:var(--navy-2)}
+[hidden]{display:none!important}
+@media (max-width:36rem){.facts-list .row{grid-template-columns:1fr;gap:.2rem}h1{font-size:1.65rem}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media print{
+ html{font-size:14pt}
+ .top,.foot,.skip,.no-print,.crumbs,.actions{display:none!important}
+ .note{border:2px solid #000;background:none}
+ .flyer-qr{display:flex;gap:1.2rem;align-items:center;margin-top:1rem;border-top:2px solid #000;padding-top:1rem}
+ .qr{width:2in;height:2in}
+ h1{font-size:28pt;color:#000}
+ a{color:#000;text-decoration:none}
+}
