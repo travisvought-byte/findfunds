@@ -195,6 +195,8 @@ def qr_svg(url):
     img.save(buf)
     svg = buf.getvalue().decode()
     svg = svg[svg.index("<svg"):]
+    # ElementTree's spacing before "/>" differs between Python versions; normalize it.
+    svg = svg.replace(" />", "/>")
     return svg.replace("<svg ", '<svg role="img" aria-label="QR code for this page" class="qr" ', 1)
 
 
