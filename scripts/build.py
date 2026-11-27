@@ -1,4 +1,4 @@
-"""Build the FindFundraisers.org static site into docs/ from data/events.json.
+"""Build the Ohio community events directory into docs/ from the JSON files in data/.
 
 Usage: python3 scripts/build.py
 
@@ -7,20 +7,27 @@ The output is deterministic (no build date), so CI can rebuild and check that do
 import csv
 import io
 import json
+import re
 import shutil
 from pathlib import Path
 
 import qrcode
 import qrcode.image.svg
 
-from ffconfig import (BASE_URL, CURRENT_SEASON, FIND_BINGO_OHIO, GIVING_TUESDAY, GOATCOUNTER,
-                  ONLINE_RAFFLE_SALES_ALLOWED, SITE_NAME, SUBMIT_EMAIL, TYPES, VHG, county_slug, date_list, e,
-                  is_current, long_date, phone_display, phone_href, time_range)
+from ffconfig import (BASE_URL, BRAND_HTML, CURRENT_SEASON, FIND_BINGO_OHIO, GIVING_TUESDAY, GOATCOUNTER,
+                  GOATCOUNTER_PREFIX, INDEXNOW_KEY, KINDS, MONTHS_LONG, ONLINE_RAFFLE_SALES_ALLOWED, ORG_TYPES,
+                  SITE_NAME, SUBMIT_EMAIL, TYPES, VHG, county_slug, date_list, date_span, e, is_current, long_date,
+                  phone_display, phone_href, time_range)
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 EVENTS = json.loads((ROOT / "data" / "events.json").read_text())
 ZIPS = json.loads((ROOT / "data" / "ohio-zips.json").read_text())
+SERIES = json.loads((ROOT / "data" / "series.json").read_text())
+ORGS = json.loads((ROOT / "data" / "organizers.json").read_text())
+ORG_BY_SLUG = {o["slug"]: o for o in ORGS}
+COUNTIES = sorted({x["venue"]["county"] for x in EVENTS + SERIES if x["venue"]["county"]} | {o["county"] for o in ORGS if o["county"]})
+VENDOR_MAPS = "https://github.com/travisvought-byte"
 
 ICONS = {
     "fish": '<path d="M3 12c3-5 9-6 13-3l4-3v12l-4-3c-4 3-10 2-13-3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="8" cy="11" r="1.3" fill="currentColor"/>',
@@ -35,6 +42,21 @@ ICONS = {
     "phone": '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
     "info": '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v6M12 7.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     "print": '<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "flag": '<path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>',
+    "star": '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "gift": '<rect x="3" y="9" width="18" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9v12M3 13h18M12 9c-2-4-6-4-6-1.5S9 9 12 9c3 0 6-.5 6-1.5S14 5 12 9z" fill="none" stroke="currentColor" stroke-width="2"/>',
+    "basket": '<path d="M3 10h18l-2 10H5zM8 10l3-6M16 10l-3-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "music": '<path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>',
+    "car": '<path d="M4 16v-4l2-5h12l2 5v4zM4 16v3M20 16v3M3 12h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7.5" cy="14" r="1" fill="currentColor"/><circle cx="16.5" cy="14" r="1" fill="currentColor"/>',
+    "run": '<circle cx="14" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 21l4-6 3 2 1 4M9 11l3-3 3 3 3 1M10 15l2-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    "book": '<path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "tree": '<path d="M12 3l6 8h-3l4 6H5l4-6H6zM12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "users": '<circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 0 1 0 5M18 14c2 .8 3 3 3 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    "church": '<path d="M12 2v5M10 4h4M5 21V11l7-4 7 4v10zM10 21v-5h4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "fire": '<path d="M12 21c-4 0-7-2.7-7-6.5C5 10 9 8 9 3c3 2 5 4.5 5 7 1-1 1.5-2.5 1.5-3.5C18 9 19 12 19 14.5 19 18.3 16 21 12 21z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "building": '<path d="M4 21V5l8-2v18M12 8h8v13M2 21h20M7 8h2M7 12h2M7 16h2M15 12h2M15 16h2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    "globe": '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" fill="none" stroke="currentColor" stroke-width="2"/>',
+    "search": '<circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     "share": '<circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="6" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6" stroke="currentColor" stroke-width="2"/>',
 }
 
@@ -52,11 +74,19 @@ def zip_point(rec):
     if z and z in ZIPS:
         return ZIPS[z], False
     # No ZIP: use the middle of the other listings in the same city, marked approximate.
-    pts = [ZIPS[r["venue"]["zip"]] for r in EVENTS
-           if r["venue"]["city"] == rec["venue"]["city"] and r["venue"].get("zip") in ZIPS]
-    if pts:
-        return [round(sum(p[0] for p in pts) / len(pts), 3), round(sum(p[1] for p in pts) / len(pts), 3)], True
-    return None, True
+    pt = CITY_POINTS.get(rec["venue"]["city"].lower())
+    return (pt, True) if pt else (None, True)
+
+
+def _city_points():
+    acc = {}
+    for city, z in ([(r["venue"]["city"], r["venue"].get("zip")) for r in EVENTS + SERIES] + [(o["city"], o.get("zip")) for o in ORGS]):
+        if city and z in ZIPS:
+            acc.setdefault(city.lower(), []).append(ZIPS[z])
+    return {c: [round(sum(p[0] for p in v) / len(v), 3), round(sum(p[1] for p in v) / len(v), 3)] for c, v in acc.items()}
+
+
+CITY_POINTS = _city_points()
 
 
 def page(*, title, description, path, depth, body, jsonld=None, scripts=""):
@@ -86,10 +116,12 @@ def page(*, title, description, path, depth, body, jsonld=None, scripts=""):
 <a class="skip" href="#main">Skip to main content</a>
 <header class="top">
 <div class="wrap top-in">
-<a class="brand" href="{r}">{icon("fish", "ic brand-ic")}<span>Find<b>Fundraisers</b>.org</span></a>
+<a class="brand" href="{r}">{icon("pin", "ic brand-ic")}<span>{BRAND_HTML}</span></a>
 <nav aria-label="Main">
 <ul>
+<li><a href="{r}events/">Events</a></li>
 <li><a href="{r}fish-fries/">Fish fries</a></li>
+<li><a href="{r}organizers/">Who runs them</a></li>
 <li><a href="{r}add/">Add your event</a></li>
 <li><a href="{r}about/">About</a></li>
 </ul>
@@ -106,7 +138,7 @@ def page(*, title, description, path, depth, body, jsonld=None, scripts=""):
 <p><a href="{r}data/">Open data (CC BY 4.0)</a> · <a href="{r}about/#privacy">Privacy</a> · <a href="{r}add/">Report a change</a></p>
 </div>
 </footer>
-<script>window.goatcounter={{path:function(p){{return '/findfundraisers'+p}}}};</script>
+<script>window.goatcounter={{path:function(p){{return '{GOATCOUNTER_PREFIX}'+p}}}};</script>
 <script data-goatcounter="{GOATCOUNTER}" async src="https://gc.zgo.at/count.js"></script>
 {scripts}
 </body>
@@ -284,58 +316,368 @@ def event_page(rec):
                 scripts=f'<script src="{r}assets/event.js" defer></script>')
 
 
+# ---------- recurring events (series) ----------
+
+def cap(text):
+    text = re.sub(r"\blent\b", "Lent", text)
+    return text[:1].upper() + text[1:]
+
+
+DATED_SPAN_KINDS = {"fair", "festival", "holiday", "market", "concert", "car_show", "parade", "run_walk"}
+
+
+def series_when(s):
+    """(dates text, is_last_year) for a series."""
+    if s["next_dates"]:
+        ds, last = s["next_dates"], False
+    elif s["last_dates"]:
+        ds, last = s["last_dates"], True
+    else:
+        return "", False
+    text = date_span(ds) if (s["kind"] in DATED_SPAN_KINDS or len(ds) == 2 and s["kind"] != "fish_fry") else date_list(ds)
+    return text, last
+
+
+def series_month(s):
+    ds = s["next_dates"] or s["last_dates"]
+    return int(ds[0][5:7]) if ds else 0
+
+
+def kind_badge(kind):
+    k = KINDS[kind]
+    return f'<span class="badge">{icon(k["icon"])}<span>{e(k["label"])}</span></span>'
+
+
+def org_link(s, depth):
+    o = ORG_BY_SLUG.get(s.get("organizer_slug"))
+    name = s["organizer"].get("name") or (o["name"] if o else "")
+    if o and o["county"]:
+        return f'<a href="{up(depth)}ohio/{county_slug(o["county"])}/#{e(o["slug"])}">{e(name)}</a>'
+    return e(name)
+
+
+def series_item(s, depth, show_county=True):
+    """Compact list item used on the search page, kind pages and county hubs."""
+    r = up(depth)
+    v = s["venue"]
+    when, last = series_when(s)
+    when_html = f"{e(when)} (last year)" if last else e(when)
+    if not when_html:
+        when_html = e(s["timing"]) or "Dates not posted yet"
+    elif s["timing"] and last:
+        when_html = f"{e(cap(s['timing']))}. {when_html}"
+    text = f"{s['name']} {v['city']} {v['county']}".lower()
+    place = f"{e(v['city'])}, {e(v['county'])} County" if show_county else e(v["city"])
+    return f"""<li class="item" data-county="{e(v['county'])}" data-month="{series_month(s)}" data-kind="{e(s['kind'])}" data-text="{e(text)}">
+<a class="item-name" href="{r}events/{e(s['slug'])}/">{e(s['name'])}</a>
+<span class="item-meta">{kind_badge(s['kind'])} <span>{icon("pin")}{place}</span> <span>{icon("calendar")}{when_html}</span></span>
+</li>"""
+
+
+def series_jsonld(s, url):
+    if not s["next_dates"]:
+        return None
+    v = s["venue"]
+    ev = {"@context": "https://schema.org", "@type": "Event", "name": s["name"], "url": url,
+          "startDate": s["next_dates"][0], "endDate": s["next_dates"][-1],
+          "eventStatus": "https://schema.org/EventScheduled",
+          "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+          "location": {"@type": "Place", "name": v["name"] or v["city"],
+                       "address": {"@type": "PostalAddress", "streetAddress": v["address"], "addressLocality": v["city"],
+                                   "addressRegion": "OH", "postalCode": v["zip"], "addressCountry": "US"}}}
+    if s["organizer"].get("name"):
+        ev["organizer"] = {"@type": "Organization", "name": s["organizer"]["name"]}
+    return ev
+
+
+def series_page(s):
+    depth = 2
+    r = up(depth)
+    v = s["venue"]
+    k = KINDS[s["kind"]]
+    url = f"{BASE_URL}/events/{s['slug']}/"
+    when, last = series_when(s)
+    rows = []
+    if s["timing"]:
+        rows.append(("calendar", "Usually", e(cap(s["timing"]))))
+    if when:
+        rows.append(("calendar", "Last year" if last else "Dates", e(when)))
+    times = time_range(s["start_time"], s["end_time"])
+    if times:
+        rows.append(("clock", "Times", e(times)))
+    where = "<br>".join(e(x) for x in (v["name"], v["address"], f"{v['city']}, OH {v['zip']}".strip()) if x)
+    map_q = ", ".join(x for x in (v["name"], v["address"], v["city"], "OH") if x)
+    where += f'<br><a href="https://www.openstreetmap.org/search?query={e(map_q.replace(" ", "+"))}">Map and directions</a>'
+    rows.append(("pin", "Where", where))
+    if s["organizer"].get("name"):
+        rows.append(("users", "Run by", org_link(s, depth)))
+    phone = s["organizer"].get("phone") or (ORG_BY_SLUG.get(s["organizer_slug"]) or {}).get("phone", "")
+    if phone_href(phone):
+        rows.append(("phone", "Call", f'<a href="{phone_href(phone)}">{e(phone_display(phone))}</a>'))
+    if s["website"]:
+        rows.append(("globe", "Website", f'<a href="{e(s["website"])}">Official event page</a>'))
+    cost = {"free": "Free to attend", "paid": "Admission or food costs money", "varies": "Some parts cost money"}.get(s["cost"])
+    if cost:
+        rows.append(("ticket", "Cost", cost))
+    facts = "\n".join(f'<div class="row"><dt>{icon(ic)}<span>{e(label)}</span></dt><dd>{val}</dd></div>' for ic, label, val in rows)
+    checked = long_date(s["checked_on"]) if s["checked_on"] else ""
+    src = f'<a href="{e(s["source_url"])}">{e(s["source"])}</a>' if s["source_url"] else e(s["source"])
+    trust = (f"Checked against the organizer's own site on {checked}." if s["trust"] == "organizer_page"
+             else f"From {src}, checked {checked}. Not yet confirmed by the organizer.")
+    note = ""
+    if last:
+        note = f'<p class="note big">{icon("info")}<span>This year\'s dates aren\'t posted yet. The dates shown are last year\'s, so check with the organizer before you go.</span></p>'
+    body = f"""<div class="wrap narrow event">
+<p class="crumbs"><a href="{r}">Home</a> › <a href="{r}{k['path']}/">{e(k['plural'])}</a> › <a href="{r}ohio/{county_slug(v['county'])}/">{e(v['county'])} County</a></p>
+<h1>{e(s['name'])}</h1>
+<p class="where">{kind_badge(s['kind'])} <span>{e(v['city'])}, {e(v['county'])} County, Ohio</span></p>
+{note}
+<dl class="facts-list">
+{facts}
+</dl>
+<div class="actions no-print">
+<button type="button" class="btn ghost" data-share data-title="{e(s['name'] + ', ' + v['city'])}">{icon("share")}<span>Share this page</span></button>
+</div>
+<p class="trust">{trust}</p>
+<p class="no-print">Run this event? <a href="{r}add/?event={e(s['slug'])}">Send this year's dates or a correction</a>. It's free.</p>
+<p class="no-print">More in {e(v['county'])} County: <a href="{r}ohio/{county_slug(v['county'])}/">events and the groups that run them</a>.</p>
+</div>"""
+    desc = f"{s['name']} in {v['city']}, Ohio: when it happens, where, who runs it and how to reach them."
+    return page(title=f"{s['name']}, {v['city']}, Ohio | {SITE_NAME}", description=desc, path=f"events/{s['slug']}/",
+                depth=depth, body=body, jsonld=series_jsonld(s, url), scripts=f'<script src="{r}assets/event.js" defer></script>')
+
+
+def filter_form(depth, kinds, preset_kind=""):
+    county_opts = "".join(f'<option value="{e(c)}">{e(c)} County</option>' for c in COUNTIES)
+    month_opts = "".join(f'<option value="{i}">{m}</option>' for i, m in enumerate(MONTHS_LONG, 1))
+    kind_opts = "".join(f'<option value="{k}"{" selected" if k == preset_kind else ""}>{e(KINDS[k]["plural"])}</option>' for k in kinds)
+    kind_field = "" if preset_kind else f'<div class="field"><label for="f-kind">Kind of event</label><select id="f-kind" name="kind"><option value="">All kinds</option>{kind_opts}</select></div>'
+    return f"""<section class="finder" aria-labelledby="filter-h">
+<h2 id="filter-h">{icon("search")}<span>Search events</span></h2>
+<form class="filterform" role="search">
+<div class="field"><label for="f-county">County</label><select id="f-county" name="county"><option value="">All counties</option>{county_opts}</select></div>
+<div class="field"><label for="f-month">Month</label><select id="f-month" name="month"><option value="">Any month</option>{month_opts}</select></div>
+{kind_field}
+<div class="field"><label for="f-q">Name or town</label><input id="f-q" name="q" type="search" autocomplete="off"></div>
+<button type="submit">Show events</button>
+</form>
+<p class="status" role="status" aria-live="polite"></p>
+</section>"""
+
+
+def grouped_by_month(items, depth):
+    by_month = {}
+    for s in items:
+        by_month.setdefault(series_month(s), []).append(s)
+    out = []
+    for m in sorted(by_month, key=lambda m: m or 13):
+        name = MONTHS_LONG[m - 1] if m else "Dates not posted yet"
+        hid = f"m-{m or 'tbd'}"
+        lis = "\n".join(series_item(s, depth) for s in sorted(by_month[m], key=lambda s: ((s["next_dates"] or s["last_dates"] or [""])[0], s["name"])))
+        out.append(f'<section class="month" id="{hid}" aria-labelledby="{hid}-h" data-month-group><h2 id="{hid}-h">{e(name)}</h2><ul class="items">{lis}</ul></section>')
+    jump = " · ".join(f'<a href="#m-{m or "tbd"}">{e(MONTHS_LONG[m - 1] if m else "Not posted")}</a>' for m in sorted(by_month, key=lambda m: m or 13))
+    return f'<nav class="jump" aria-label="Jump to a month"><p><strong>Jump to a month:</strong> {jump}</p></nav>\n<div data-filterable>{"".join(out)}</div>\n<p class="empty" data-empty hidden>No events match. Try another month or county, or <a href="{up(depth)}add/">add one you know about</a>.</p>'
+
+
+def events_index():
+    kinds = [k for k in KINDS if any(s["kind"] == k for s in SERIES)]
+    body = f"""<div class="wrap">
+<h1>{icon("calendar")}<span>Ohio community events</span></h1>
+<p class="lead">Fairs, festivals, fish fries, parades, holiday events and more, by county and month. Most dates shown are last year's, since organizers post the coming year's dates in the spring; each listing says which.</p>
+{filter_form(1, kinds)}
+<p>Fish fries with ZIP code search are on the <a href="../fish-fries/">fish fry page</a>.</p>
+{grouped_by_month(SERIES, 1)}
+</div>"""
+    return page(title=f"Ohio community events by county and month | {SITE_NAME}",
+                description="Find Ohio county fairs, festivals, fish fries, parades and holiday events by county and month, with who runs them.",
+                path="events/", depth=1, body=body, scripts='<script src="../assets/filter.js" defer></script>')
+
+
+def kind_page(kind):
+    k = KINDS[kind]
+    items = [s for s in SERIES if s["kind"] == kind]
+    intro = {
+        "fair": "Every Ohio county fair and independent fair, run by the county agricultural societies. Fair season runs from June through October.",
+        "festival": "Town, church and heritage festivals across Ohio, from strawberry and sweet corn festivals to Oktoberfests.",
+        "holiday": "Holiday lights, parades, tree lightings and Christmas walks across Ohio.",
+    }.get(kind, f"{k['plural']} across Ohio.")
+    body = f"""<div class="wrap">
+<p class="crumbs"><a href="../">Home</a> › <a href="../events/">Events</a></p>
+<h1>{icon(k['icon'])}<span>Ohio {e(k['plural'].lower())}</span></h1>
+<p class="lead">{e(intro)} Dates marked "last year" are last year's schedule; check with the organizer before you go.</p>
+{filter_form(1, [kind], preset_kind=kind)}
+{grouped_by_month(items, 1)}
+</div>"""
+    return page(title=f"Ohio {k['plural'].lower()}: dates and places | {SITE_NAME}",
+                description=f"Ohio {k['plural'].lower()} by county and month, with dates, places and who runs them.",
+                path=f"{k['path']}/", depth=1, body=body, scripts='<script src="../assets/filter.js" defer></script>')
+
+
+def fish_page():
+    fish_events = [x for x in EVENTS if x["type"] == "fish_fry"]
+    fish_series = [s for s in SERIES if s["kind"] == "fish_fry"]
+    t = TYPES["fish_fry"]
+    lis = "\n".join(series_item(s, 1) for s in sorted(fish_series, key=lambda s: (s["venue"]["county"], s["venue"]["city"], s["name"])))
+    body = f"""<div class="wrap">
+<p class="crumbs"><a href="../">Home</a> › <a href="../events/">Events</a></p>
+<h1>{icon(t['icon'])}<span>Ohio fish fries</span></h1>
+<p class="lead">Lent 2027 runs from Ash Wednesday, February 10, to Easter, March 28. Most fish fries are on Fridays. Listings showing 2026 dates are last year's schedule; call before you go.</p>
+{finder_box(1)}
+{listing_section(fish_events, 1)}
+<section aria-labelledby="more-fish-h">
+<h2 id="more-fish-h">More fish fries around Ohio</h2>
+<p>From diocesan and local news fish fry lists, last Lent. Each has its own page with the details we have.</p>
+<ul class="items">{lis}</ul>
+</section>
+</div>"""
+    return page(title=f"Ohio fish fries near you, Lent 2027 | {SITE_NAME}",
+                description="Find Ohio fish fries by ZIP code and county: parish, Legion, VFW and fire department fish fries with dates, times and phone numbers.",
+                path="fish-fries/", depth=1, body=body, scripts=finder_script(1))
+
+
+# ---------- organizers ----------
+
+def org_row(o, depth, show_county=False):
+    bits = []
+    place = ", ".join(x for x in (o["address"], o["city"]) if x)
+    if show_county and o["county"]:
+        place += f" ({o['county']} County)"
+    if place:
+        bits.append(f'<span>{icon("pin")}{e(place)}</span>')
+    if phone_href(o["phone"]):
+        bits.append(f'<span>{icon("phone")}<a href="{phone_href(o["phone"])}">{e(phone_display(o["phone"]))}</a></span>')
+    if o["events_url"]:
+        bits.append(f'<span>{icon("calendar")}<a href="{e(o["events_url"])}">Events calendar<span class="sr-only"> for {e(o["name"])}</span></a></span>')
+    if o["website"] and o["website"] != o["events_url"]:
+        bits.append(f'<span>{icon("globe")}<a href="{e(o["website"])}">Website<span class="sr-only"> for {e(o["name"])}</span></a></span>')
+    hosted = [s for s in SERIES if s.get("organizer_slug") == o["slug"]]
+    if hosted:
+        links = ", ".join(f'<a href="{up(depth)}events/{e(s["slug"])}/">{e(s["name"])}</a>' for s in hosted[:6])
+        bits.append(f'<span>{icon("star")}Runs {links}</span>')
+    return f'<li class="item org" id="{e(o["slug"])}"><span class="item-name">{e(o["name"])}</span><span class="item-meta">{" ".join(bits)}</span></li>'
+
+
+def organizers_index():
+    present = [t for t in ORG_TYPES if any(o["type"] == t for o in ORGS)]
+    tiles = "".join(f'<li><a class="tile" href="{ORG_TYPES[t]["path"]}/">{icon(ORG_TYPES[t]["icon"])}<span>{e(ORG_TYPES[t]["plural"])}</span></a></li>' for t in present)
+    counties = "".join(f'<li><a href="../ohio/{county_slug(c)}/">{e(c)}</a></li>' for c in COUNTIES)
+    body = f"""<div class="wrap">
+<h1>{icon("users")}<span>Who runs community events in Ohio</span></h1>
+<p class="lead">Veterans posts, parishes, fire departments, libraries, park districts, fair boards, chambers and visitors bureaus: the groups that put on the fairs, dinners, breakfasts and festivals in every county. Reach out to them to go, volunteer or join.</p>
+<h2>By kind of group</h2>
+<ul class="tiles">{tiles}</ul>
+<h2>By county</h2>
+<ul class="county-grid">{counties}</ul>
+</div>"""
+    return page(title=f"Who runs community events in Ohio | {SITE_NAME}",
+                description="Ohio veterans posts, parishes, fire departments, libraries, park districts, fair boards and chambers that run community events, by county.",
+                path="organizers/", depth=1, body=body)
+
+
+def org_type_page(t):
+    ot = ORG_TYPES[t]
+    orgs = [o for o in ORGS if o["type"] == t]
+    by_county = {}
+    for o in orgs:
+        by_county.setdefault(o["county"] or "County not listed", []).append(o)
+    keys = sorted(by_county, key=lambda c: (c == "County not listed", c))
+    jump = " · ".join(f'<a href="#{slugify_id(c)}">{e(c)}</a>' for c in keys)
+    groups = "".join(
+        f'<section id="{slugify_id(c)}" aria-labelledby="{slugify_id(c)}-h"><h2 id="{slugify_id(c)}-h">{e(c if c == "County not listed" else c + " County")}</h2><ul class="items">{"".join(org_row(o, 2) for o in sorted(by_county[c], key=lambda o: (o["city"], o["name"])))}</ul></section>'
+        for c in keys)
+    body = f"""<div class="wrap">
+<p class="crumbs"><a href="../../">Home</a> › <a href="../">Who runs them</a></p>
+<h1>{icon(ot['icon'])}<span>{e(ot['plural'])} in Ohio</span></h1>
+<p class="lead">Contact details come from public rosters and each group's own site. Call ahead before visiting; hours and events change.</p>
+<nav class="jump" aria-label="Jump to a county"><p><strong>Jump to a county:</strong> {jump}</p></nav>
+{groups}
+</div>"""
+    return page(title=f"{ot['plural']} in Ohio, by county | {SITE_NAME}",
+                description=f"Ohio {ot['plural'].lower()} by county, with addresses, phone numbers and events calendars.",
+                path=f"organizers/{ot['path']}/", depth=2, body=body)
+
+
+def slugify_id(text):
+    from ffconfig import slugify
+    return "c-" + slugify(text)
+
+
+def county_hub(county):
+    depth = 2
+    r = up(depth)
+    fish = [x for x in EVENTS if x["venue"]["county"] == county]
+    series = [s for s in SERIES if s["venue"]["county"] == county]
+    orgs = [o for o in ORGS if o["county"] == county]
+    sections = []
+    if fish:
+        sections.append(f'<section aria-labelledby="fish-h"><h2 id="fish-h">{icon("fish")}<span>Fish fries</span></h2><ul class="cards">{"".join(card(x, depth) for x in sorted(fish, key=lambda x: (x["venue"]["city"], x["name"])))}</ul></section>')
+    if series:
+        by_kind = {}
+        for s in series:
+            by_kind.setdefault(s["kind"], []).append(s)
+        parts = []
+        for k in KINDS:
+            if k in by_kind:
+                lis = "".join(series_item(s, depth, show_county=False) for s in sorted(by_kind[k], key=lambda s: (series_month(s) or 13, s["name"])))
+                parts.append(f'<h3>{icon(KINDS[k]["icon"])}<span>{e(KINDS[k]["plural"])}</span></h3><ul class="items">{lis}</ul>')
+        sections.append(f'<section aria-labelledby="ev-h"><h2 id="ev-h">{icon("calendar")}<span>Events through the year</span></h2>{"".join(parts)}</section>')
+    if orgs:
+        by_type = {}
+        for o in orgs:
+            by_type.setdefault(o["type"], []).append(o)
+        parts = []
+        for t in ORG_TYPES:
+            if t in by_type:
+                parts.append(f'<h3>{icon(ORG_TYPES[t]["icon"])}<span>{e(ORG_TYPES[t]["plural"])}</span></h3><ul class="items">{"".join(org_row(o, depth) for o in sorted(by_type[t], key=lambda o: (o["city"], o["name"])))}</ul>')
+        sections.append(f'<section aria-labelledby="org-h"><h2 id="org-h">{icon("users")}<span>Who runs events here</span></h2><p>Call or visit their calendars to go, volunteer or join.</p>{"".join(parts)}</section>')
+    body = f"""<div class="wrap">
+<p class="crumbs"><a href="{r}">Home</a> › <a href="{r}organizers/">Counties</a> › {e(county)} County</p>
+<h1>Community events in {e(county)} County, Ohio</h1>
+<p class="lead">Fairs, festivals, fish fries and more in {e(county)} County, and the posts, parishes, libraries and other groups that run them. Dates marked "last year" are last year's schedule; check before you go.</p>
+{"".join(sections)}
+<p>Don't see your event or group? <a href="{r}add/">Add it for free</a>.</p>
+</div>"""
+    return page(title=f"{county} County, Ohio community events and who runs them | {SITE_NAME}",
+                description=f"Fairs, festivals, fish fries and community groups in {county} County, Ohio, with dates, places, phone numbers and calendars.",
+                path=f"ohio/{county_slug(county)}/", depth=depth, body=body)
+
+
 def home_page():
-    fish = [x for x in EVENTS if x["type"] == "fish_fry"]
-    types = "".join(
-        f'<li><a href="{t["path"]}/" class="tile">{icon(t["icon"])}<span>{e(t["plural"])}</span></a></li>'
-        for k, t in TYPES.items() if k == "fish_fry")
+    kinds = ["fair", "festival", "fish_fry", "holiday"]
+    tiles = "".join(f'<li><a href="{KINDS[k]["path"]}/" class="tile">{icon(KINDS[k]["icon"])}<span>{e(KINDS[k]["plural"])}</span></a></li>' for k in kinds)
+    tiles += f'<li><a href="events/" class="tile">{icon("calendar")}<span>All events by month</span></a></li>'
+    tiles += f'<li><a href="organizers/" class="tile">{icon("users")}<span>Who runs them</span></a></li>'
+    tiles += f'<li><a href="add/" class="tile add">{icon("heart")}<span>Add your event</span></a></li>'
+    county_opts = "".join(f'<option value="{e(c)}">{e(c)} County</option>' for c in COUNTIES)
+    month_opts = "".join(f'<option value="{i}">{m}</option>' for i, m in enumerate(MONTHS_LONG, 1))
+    counties = "".join(f'<li><a href="ohio/{county_slug(c)}/">{e(c)}</a></li>' for c in COUNTIES)
     body = f"""<section class="hero">
 <div class="wrap">
-<h1>Fish fries, breakfasts and benefit dinners near you</h1>
-<p class="lead">A free Ohio list of community fundraisers at Legion and VFW halls, parishes, fire departments and clubs. Every gift goes straight to the group.</p>
-<ul class="tiles">{types}<li><a href="add/" class="tile add">{icon("calendar")}<span>Add your event</span></a></li></ul>
+<h1>Find community events near you in Ohio</h1>
+<p class="lead">County fairs, festivals, fish fries, parades and holiday events, and the posts, parishes, libraries and groups that run them. Free, in every county.</p>
+<form class="homesearch" action="events/" method="get" role="search" aria-label="Search events">
+<div class="field"><label for="h-county">County</label><select id="h-county" name="county"><option value="">All counties</option>{county_opts}</select></div>
+<div class="field"><label for="h-month">Month</label><select id="h-month" name="month"><option value="">Any month</option>{month_opts}</select></div>
+<button type="submit">{icon("search")}<span>Find events</span></button>
+</form>
+<ul class="tiles">{tiles}</ul>
 </div>
 </section>
 <div class="wrap">
 <section class="lent" aria-labelledby="lent-h">
 <h2 id="lent-h">{icon("fish")}<span>Lenten fish fries</span></h2>
-<p>Lent 2027 starts on Ash Wednesday, February 10. Parishes and posts usually post their fish fry dates in January. Until then, each listing shows last year's schedule so you know who holds one.</p>
+<p>Lent 2027 starts on Ash Wednesday, February 10. Parishes and posts usually post their fish fry dates in January. Until then, each listing shows last year's schedule so you know who holds one. <a href="fish-fries/">Find a fish fry by ZIP code</a>.</p>
 </section>
-{finder_box(0)}
-{listing_section(fish, 0, "h3")}
+<section aria-labelledby="county-h">
+<h2 id="county-h">{icon("pin")}<span>Everything in your county</span></h2>
+<ul class="county-grid">{counties}</ul>
+</section>
 </div>"""
-    return page(title=f"Find a fish fry or community fundraiser in Ohio | {SITE_NAME}",
-                description="Free list of Ohio fish fries, pancake breakfasts, euchre nights and benefit dinners, by ZIP code. Every gift goes straight to the group.",
-                path="", depth=0, body=body, scripts=finder_script(0),
+    return page(title=f"Find community events in Ohio: fairs, festivals, fish fries | {SITE_NAME}",
+                description="Free Ohio guide to county fairs, festivals, fish fries, parades and holiday events by county and month, and the groups that run them.",
+                path="", depth=0, body=body,
                 jsonld={"@context": "https://schema.org", "@type": "WebSite", "name": SITE_NAME, "url": BASE_URL + "/",
                         "publisher": {"@type": "Organization", "name": "Veteran Home Guardians", "url": VHG}})
-
-
-def type_page(type_key):
-    t = TYPES[type_key]
-    recs = [x for x in EVENTS if x["type"] == type_key]
-    body = f"""<div class="wrap">
-<h1>{icon(t['icon'])}<span>Ohio {e(t['plural'].lower())}</span></h1>
-<p class="lead">Lent 2027 runs from Ash Wednesday, February 10, to Easter, March 28. Most fish fries are on Fridays. Listings showing 2026 dates are last year's schedule; call before you go.</p>
-{finder_box(1)}
-{listing_section(recs, 1)}
-</div>"""
-    return page(title=f"Ohio {t['plural'].lower()} near you, Lent 2027 | {SITE_NAME}",
-                description=f"Find Ohio {t['plural'].lower()} by ZIP code: parish, Legion, VFW and fire department fish fries with dates, times and phone numbers.",
-                path=f"{t['path']}/", depth=1, body=body, scripts=finder_script(1))
-
-
-def county_page(county, recs):
-    body = f"""<div class="wrap">
-<p class="crumbs"><a href="../../">Home</a> › {e(county)} County</p>
-<h1>Fish fries and fundraisers in {e(county)} County, Ohio</h1>
-<p class="lead">Community fish fries, breakfasts and benefit dinners in {e(county)} County. Listings showing 2026 dates are last year's schedule; call before you go.</p>
-<ul class="cards">{''.join(card(x, 2) for x in sorted(recs, key=lambda x: (x['venue']['city'], x['name'])))}</ul>
-<p>Don't see your event? <a href="../../add/">Add it for free</a>.</p>
-</div>"""
-    return page(title=f"{county} County, Ohio fish fries and fundraisers | {SITE_NAME}",
-                description=f"Fish fries, breakfasts and benefit dinners in {county} County, Ohio, with dates, times and phone numbers.",
-                path=f"ohio/{county_slug(county)}/", depth=2, body=body)
 
 
 def add_page():
@@ -380,49 +722,69 @@ def add_page():
 def about_page():
     body = f"""<div class="wrap narrow prose">
 <h1>About {SITE_NAME}</h1>
-<p class="lead">{SITE_NAME} lists community fundraisers so people can find them, and so the groups that run them get a simple page and flyer without paying anyone.</p>
-<h2>How listings work</h2>
+<p class="lead">{SITE_NAME} maps the fairs, festivals, fish fries, dinners and holiday events that bring Ohio towns together, and the posts, parishes, libraries, fire departments and other groups that run them, so anyone can find them and join in.</p>
+<h2>Where listings come from</h2>
 <ul>
-<li>Anyone can send an event. We check each one before it goes up.</li>
-<li>Some listings start from public lists, such as a diocese's fish fry page. Those say where they came from and ask you to call first until the organizer confirms them.</li>
-<li>Organizers can send new dates or corrections any time from their event's page.</li>
+<li>Public lists: the Ohio fair schedule, diocesan fish fry lists, festival calendars, and the rosters of veterans posts, libraries, park districts, chambers and visitors bureaus.</li>
+<li>Organizers' own sites. A listing says whether it was checked there or only on someone else's list.</li>
+<li>Anyone can send an event or a correction. We check each one before it goes up.</li>
 </ul>
+<p>Every listing shows its source and the date we last checked it. Listings we haven't rechecked in six months get checked again. Most dates shown in the off-season are last year's, and the listing says so.</p>
 <h2>Money</h2>
-<p>We never collect or hold money for anyone. A page links to the group's own way to give, or says to bring cash. Ohio allows raffle and 50/50 tickets to be sold in person only, so we never link to online raffle ticket sales.</p>
+<p>Listings are free. We never collect or hold money for anyone. Ohio allows raffle and 50/50 tickets to be sold in person only, so we never link to online raffle ticket sales.</p>
+<h2>Related guides</h2>
+<ul>
+<li><a href="{FIND_BINGO_OHIO}">Find Bingo in Ohio</a>: bingo halls and sessions.</li>
+<li><a href="{VHG}">Veteran Home Guardians</a>: veteran visitors for people in long-term care, and resources for veterans and families.</li>
+</ul>
 <h2>Open data</h2>
-<p>The full list is free to reuse under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See <a href="../data/">the data page</a>.</p>
+<p>The full lists are free to reuse under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See <a href="../data/">the data page</a>.</p>
 <h2 id="privacy">Privacy</h2>
 <p>We count visits with GoatCounter, which uses no cookies and doesn't store your IP address. The site is hosted on GitHub Pages, which may keep server logs for security. Contact details you send with an event are used only to check it and are never published.</p>
 <h2>Who runs it</h2>
-<p>{SITE_NAME} is a free community service of <a href="{VHG}">Veteran Home Guardians</a>, an Ohio 501(c)(3) that places veteran visitors in long-term care facilities. It is a sister site of <a href="https://www.findbingo.org/">FindBingo.org</a>.</p>
+<p>{SITE_NAME} is a free community service of <a href="{VHG}">Veteran Home Guardians</a>, an Ohio 501(c)(3) that places veteran visitors in long-term care facilities.</p>
 </div>"""
-    return page(title=f"About {SITE_NAME}", description="How FindFundraisers.org lists Ohio community fundraisers, handles data and protects privacy.",
+    return page(title=f"About {SITE_NAME}", description=f"How {SITE_NAME} maps Ohio community events and the groups that run them, where listings come from, and privacy.",
                 path="about/", depth=1, body=body)
 
 
 def data_page():
     body = f"""<div class="wrap narrow prose">
 <h1>Open data</h1>
-<p class="lead">Every listing is free to reuse under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Please credit "{SITE_NAME}, a service of Veteran Home Guardians".</p>
+<p class="lead">Every list is free to reuse under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Please credit "{SITE_NAME}, a service of Veteran Home Guardians".</p>
 <ul>
-<li><a href="events.json">events.json</a>: every listing, with host, venue, dates, times, source and trust level.</li>
-<li><a href="events.csv">events.csv</a>: the same list as a spreadsheet, one row per listing.</li>
+<li><a href="series.json">series.json</a> and <a href="series.csv">series.csv</a>: recurring events (fairs, festivals, fish fries, holiday events and more) with place, organizer, last and next dates, source and last-checked date.</li>
+<li><a href="organizers.json">organizers.json</a> and <a href="organizers.csv">organizers.csv</a>: the groups that run events, with address, phone, website, events calendar, source and last-checked date.</li>
+<li><a href="events.json">events.json</a> and <a href="events.csv">events.csv</a>: dated fish fry listings with flyers.</li>
 </ul>
-<p>Each event page also carries schema.org Event markup for its upcoming dates. Fields follow schema.org Event names where they exist; "trust" is "public_list" (from someone else's list, not yet confirmed), "organizer" (confirmed by the organizer) or "claimed" (kept up to date by the organizer).</p>
+<p>Event pages carry schema.org Event markup only for dates that are posted for the coming season. "trust" says how far a record was checked: "official_list" (from an official roster), "public_list" (from someone else's list), "organizer_page" (checked on the organizer's own site), "organizer" (confirmed by the organizer) or "claimed" (kept up to date by the organizer).</p>
 </div>"""
-    return page(title=f"Open data | {SITE_NAME}", description="Download the FindFundraisers.org list of Ohio community fundraisers as JSON or CSV, free under CC BY 4.0.",
+    return page(title=f"Open data | {SITE_NAME}", description=f"Download {SITE_NAME}'s lists of Ohio community events and organizers as JSON or CSV, free under CC BY 4.0.",
                 path="data/", depth=1, body=body)
 
 
 def not_found():
-    body = """<div class="wrap narrow"><h1>We couldn't find that page</h1><p>The event may have moved. <a href="/">Search all events</a> or <a href="/add/">tell us what you were looking for</a>.</p></div>"""
-    return page(title=f"Page not found | {SITE_NAME}", description="Page not found.", path="404.html", depth=0, body=body)
+    body = f"""<div class="wrap narrow"><h1>We couldn't find that page</h1><p>The event may have moved. <a href="{BASE_URL}/events/">Search all events</a> or <a href="{BASE_URL}/add/">tell us what you were looking for</a>.</p></div>"""
+    return page(title=f"Page not found | {SITE_NAME}", description="Page not found.", path="404.html", depth=0, body=body).replace(
+        'href="assets/', f'href="{BASE_URL}/assets/').replace('src="assets/', f'src="{BASE_URL}/assets/').replace('<a class="brand" href="">', f'<a class="brand" href="{BASE_URL}/">').replace(
+        '<a href="events/">', f'<a href="{BASE_URL}/events/">').replace('<a href="fish-fries/">', f'<a href="{BASE_URL}/fish-fries/">').replace(
+        '<a href="organizers/">', f'<a href="{BASE_URL}/organizers/">').replace('<a href="add/">', f'<a href="{BASE_URL}/add/">').replace(
+        '<a href="about/">', f'<a href="{BASE_URL}/about/">').replace('<a href="data/">', f'<a href="{BASE_URL}/data/">').replace(
+        '<a href="about/#privacy">', f'<a href="{BASE_URL}/about/#privacy">')
 
 
 def write(rel, text):
     p = DOCS / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text)
+
+
+def to_csv(rows, header):
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(header)
+    w.writerows(rows)
+    return buf.getvalue()
 
 
 def main():
@@ -432,38 +794,62 @@ def main():
     (DOCS / ".nojekyll").write_text("")
     urls = [""]
     write("index.html", home_page())
-    for k in sorted({x["type"] for x in EVENTS}):
-        write(f"{TYPES[k]['path']}/index.html", type_page(k))
-        urls.append(f"{TYPES[k]['path']}/")
-    counties = {}
+    write("events/index.html", events_index())
+    urls.append("events/")
+    write("fish-fries/index.html", fish_page())
+    urls.append("fish-fries/")
+    for k in KINDS:
+        if k == "fish_fry" or not any(s["kind"] == k for s in SERIES):
+            continue
+        write(f"{KINDS[k]['path']}/index.html", kind_page(k))
+        urls.append(f"{KINDS[k]['path']}/")
+    for s in SERIES:
+        write(f"events/{s['slug']}/index.html", series_page(s))
+        urls.append(f"events/{s['slug']}/")
     for rec in EVENTS:
-        counties.setdefault(rec["venue"]["county"], []).append(rec)
         write(f"e/{rec['slug']}/index.html", event_page(rec))
         urls.append(f"e/{rec['slug']}/")
-    for c, recs in sorted(counties.items()):
-        write(f"ohio/{county_slug(c)}/index.html", county_page(c, recs))
+    for c in COUNTIES:
+        write(f"ohio/{county_slug(c)}/index.html", county_hub(c))
         urls.append(f"ohio/{county_slug(c)}/")
+    write("organizers/index.html", organizers_index())
+    urls.append("organizers/")
+    for t in ORG_TYPES:
+        if any(o["type"] == t for o in ORGS):
+            write(f"organizers/{ORG_TYPES[t]['path']}/index.html", org_type_page(t))
+            urls.append(f"organizers/{ORG_TYPES[t]['path']}/")
     write("add/index.html", add_page())
     write("about/index.html", about_page())
     write("data/index.html", data_page())
     urls += ["add/", "about/", "data/"]
     write("404.html", not_found())
-    write("data/events.json", json.dumps(EVENTS, indent=1, ensure_ascii=False) + "\n")
+    for name, data in (("events", EVENTS), ("series", SERIES), ("organizers", ORGS)):
+        write(f"data/{name}.json", json.dumps(data, indent=1, ensure_ascii=False) + "\n")
     shutil.copy(ROOT / "data" / "ohio-zips.json", DOCS / "data" / "ohio-zips.json")
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(["slug", "name", "type", "host", "host_kind", "phone", "address", "city", "zip", "county", "season",
-                "dates", "start_time", "end_time", "price", "give_link", "raffle", "trust", "source", "source_url", "reviewed_on"])
-    for x in EVENTS:
-        v = x["venue"]
-        w.writerow([x["slug"], x["name"], x["type"], x["host"]["name"], x["host"]["kind"], x["host"].get("phone", ""),
-                    v["address"], v["city"], v.get("zip", ""), v["county"], x["season"], " ".join(x["dates"]),
-                    x.get("start_time", ""), x.get("end_time", ""), x.get("price", ""), x.get("give_link", ""),
-                    "yes" if x.get("raffle") else "no", x["trust"], x["source"], x["source_url"], x["reviewed_on"]])
-    write("data/events.csv", buf.getvalue())
+    write("data/events.csv", to_csv(
+        [[x["slug"], x["name"], x["type"], x["host"]["name"], x["host"]["kind"], x["host"].get("phone", ""),
+          x["venue"]["address"], x["venue"]["city"], x["venue"].get("zip", ""), x["venue"]["county"], x["season"], " ".join(x["dates"]),
+          x.get("start_time", ""), x.get("end_time", ""), x.get("price", ""), x.get("give_link", ""),
+          "yes" if x.get("raffle") else "no", x["trust"], x["source"], x["source_url"], x["reviewed_on"]] for x in EVENTS],
+        ["slug", "name", "type", "host", "host_kind", "phone", "address", "city", "zip", "county", "season",
+         "dates", "start_time", "end_time", "price", "give_link", "raffle", "trust", "source", "source_url", "reviewed_on"]))
+    write("data/series.csv", to_csv(
+        [[s["slug"], s["name"], s["kind"], s["recurrence"], s["timing"], " ".join(s["next_dates"]), " ".join(s["last_dates"]),
+          s["start_time"], s["end_time"], s["venue"]["name"], s["venue"]["address"], s["venue"]["city"], s["venue"]["county"],
+          s["venue"]["zip"], s["organizer"].get("name", ""), s["organizer"].get("type", ""), s.get("organizer_slug") or "",
+          s["website"], s["cost"], s["trust"], s["source"], s["source_url"], s["checked_on"]] for s in SERIES],
+        ["slug", "name", "kind", "recurrence", "timing", "next_dates", "last_dates", "start_time", "end_time", "venue", "address",
+         "city", "county", "zip", "organizer", "organizer_type", "organizer_slug", "website", "cost", "trust", "source", "source_url", "checked_on"]))
+    write("data/organizers.csv", to_csv(
+        [[o["slug"], o["name"], o["type"], o["number"], o["address"], o["city"], o["county"], o["zip"], o["phone"], o["website"],
+          o["events_url"], "; ".join(o["hosts"]), o["trust"], o["source"], o["source_url"], o["checked_on"]] for o in ORGS],
+        ["slug", "name", "type", "number", "address", "city", "county", "zip", "phone", "website", "events_url", "hosts",
+         "trust", "source", "source_url", "checked_on"]))
+    write(f"{INDEXNOW_KEY}.txt", INDEXNOW_KEY + "\n")
     write("robots.txt", f"User-agent: *\nAllow: /\nSitemap: {BASE_URL}/sitemap.xml\n")
     sm = "".join(f"<url><loc>{e(BASE_URL + '/' + u)}</loc></url>" for u in urls)
     write("sitemap.xml", f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{sm}</urlset>\n')
+    write("urls.txt", "".join(f"{BASE_URL}/{u}\n" for u in urls))
     print(f"built {len(urls)} pages into docs/")
 
 

@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -21,3 +23,13 @@ jobs:
         run: git diff --exit-code -- docs
       - name: Check data and pages
         run: python3 scripts/check.py
+      - name: Tell search engines about new pages (IndexNow)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          base="https://travisvought-byte.github.io/findfunds"
+          key=$(cd scripts && python3 -c "from ffconfig import INDEXNOW_KEY; print(INDEXNOW_KEY)")
+          if ! curl -fsS -o /dev/null "$base/$key.txt"; then echo "Site not live yet; skipping IndexNow."; exit 0; fi
+          git diff --name-only HEAD~1 HEAD -- docs | grep 'index.html$' | sed -e 's#^docs/##' -e 's#index.html$##' | head -10000 > changed.txt || true
+          if [ ! -s changed.txt ]; then echo "No changed pages."; exit 0; fi
+          python3 scripts/indexnow.py changed.txt

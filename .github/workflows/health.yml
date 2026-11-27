@@ -1,0 +1,32 @@
+name: Weekly data health check
+
+on:
+  schedule:
+    - cron: "17 11 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check records and links
+        run: python3 scripts/health.py > health.md
+      - name: Open or update the health issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          num=$(gh issue list --label data-health --state open --json number --jq '.[0].number')
+          if [ -z "$num" ]; then
+            gh label create data-health --color c9c3b6 --description "Weekly data health report" 2>/dev/null || true
+            gh issue create --title "Data health report" --label data-health --body-file health.md
+          else
+            gh issue comment "$num" --body-file health.md
+          fi
