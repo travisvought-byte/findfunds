@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ffconfig import TYPES  # noqa: E402
+from ffconfig import KINDS, ORG_TYPES, TYPES  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
@@ -46,6 +46,48 @@ for r in events:
         bad(f"{where}: raffle listing links to what looks like online ticket sales (in person only in Ohio)")
     if r["venue"].get("state") != "OH":
         bad(f"{where}: venue state is not OH")
+
+
+series = json.loads((ROOT / "data" / "series.json").read_text())
+orgs = json.loads((ROOT / "data" / "organizers.json").read_text())
+org_slugs = {o.get("slug") for o in orgs}
+TRUST = ("official_list", "public_list", "organizer_page", "organizer", "claimed")
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+for label, recs in (("series", series), ("organizer", orgs)):
+    seen = set()
+    for r in recs:
+        where = f"{label} {r.get('slug', '?')}"
+        for key in ("slug", "name", "source", "checked_on", "trust"):
+            if not r.get(key):
+                bad(f"{where}: missing {key}")
+        if r.get("slug") in seen:
+            bad(f"{where}: duplicate slug")
+        seen.add(r.get("slug"))
+        if r.get("trust") not in TRUST:
+            bad(f"{where}: unknown trust level {r.get('trust')}")
+        if r.get("checked_on") and not DATE.fullmatch(r["checked_on"]):
+            bad(f"{where}: bad checked_on")
+        for u in (r.get("source_url"), r.get("website"), r.get("events_url")):
+            if u and not u.startswith(("https://", "http://")):
+                bad(f"{where}: link is not a web address: {u}")
+for r in series:
+    where = f"series {r.get('slug', '?')}"
+    if r.get("kind") not in KINDS:
+        bad(f"{where}: unknown kind {r.get('kind')}")
+    for d in r.get("next_dates", []) + r.get("last_dates", []):
+        if not DATE.fullmatch(d):
+            bad(f"{where}: bad date {d}")
+    if r["venue"].get("state") != "OH":
+        bad(f"{where}: venue state is not OH")
+    if not r["venue"].get("county"):
+        bad(f"{where}: no county")
+    if r.get("organizer_slug") and r["organizer_slug"] not in org_slugs:
+        bad(f"{where}: organizer_slug points nowhere")
+for o in orgs:
+    if o.get("type") not in ORG_TYPES:
+        bad(f"organizer {o.get('slug')}: unknown type {o.get('type')}")
+    if o.get("state") != "OH":
+        bad(f"organizer {o.get('slug')}: state is not OH")
 
 
 # ---- pages ----
@@ -122,7 +164,7 @@ for f in sorted(DOCS.rglob("*.html")):
         except ValueError:
             bad(f"{rel}: JSON-LD does not parse")
     visible = re.sub(r"<script.*?</script>|<[^>]+>", " ", text, flags=re.S)
-    if re.search(r"\b\d[\d,]*\s+" + COUNT_WORDS, visible, re.I):
+    if re.search(r"(?<![\d-])\b\d[\d,]*\s+" + COUNT_WORDS, visible, re.I):
         bad(f"{rel}: states a count of listings")
     for href in p.links:
         if not href or href.startswith(("http://", "https://", "mailto:", "tel:", "#", "?")):
