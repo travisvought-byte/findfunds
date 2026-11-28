@@ -80,6 +80,29 @@ def up(depth):
     return "../" * depth if depth else "./"
 
 
+def full_url(path):
+    """A page's address. Wix, which serves the site at vethomeguard.org, doesn't open a folder's index.html
+    for a bare folder address, so every page address names its index.html."""
+    return BASE_URL + "/" + (path + "index.html" if path == "" or path.endswith("/") else path)
+
+
+LINK = re.compile(r'(href|action)="([^"]*)"')
+
+
+def fix_links(html):
+    """Point every link to a folder in this site at that folder's index.html (see full_url)."""
+    def sub(m):
+        attr, url = m.groups()
+        if url.startswith(("#", "mailto:", "tel:", "data:", "javascript:")) or ("://" in url and not url.startswith(BASE_URL + "/")):
+            return m.group(0)
+        cut = min([i for i in (url.find("?"), url.find("#")) if i >= 0] or [len(url)])
+        path, tail = url[:cut], url[cut:]
+        if path.endswith("/"):
+            path += "index.html"
+        return f'{attr}="{path}{tail}"'
+    return LINK.sub(sub, html)
+
+
 def zip_point(rec):
     z = rec["venue"].get("zip")
     if z and z in ZIPS:
@@ -101,7 +124,7 @@ CITY_POINTS = _city_points()
 
 
 def page(*, title, description, path, depth, body, jsonld=None, scripts=""):
-    canonical = BASE_URL + "/" + path
+    canonical = full_url(path)
     ld = ""
     if jsonld:
         ld = '<script type="application/ld+json">' + json.dumps(jsonld, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/") + "</script>"
@@ -269,7 +292,7 @@ def event_page(rec):
     depth = 2
     r = up(depth)
     v = rec["venue"]
-    url = f"{BASE_URL}/e/{rec['slug']}/"
+    url = full_url(f"e/{rec['slug']}/")
     dates, times, note = schedule_lines(rec)
     phone = rec["host"].get("phone", "")
     t = TYPES[rec["type"]]
@@ -407,7 +430,7 @@ def series_page(s):
     r = up(depth)
     v = s["venue"]
     k = KINDS[s["kind"]]
-    url = f"{BASE_URL}/events/{s['slug']}/"
+    url = full_url(f"events/{s['slug']}/")
     when, last = series_when(s)
     rows = []
     if s["timing"]:
@@ -688,7 +711,7 @@ def home_page():
     return page(title=f"Find community events in Ohio: fairs, festivals, fish fries | {SITE_NAME}",
                 description="Free Ohio guide to county fairs, festivals, fish fries, parades and holiday events by county and month, and the groups that run them.",
                 path="", depth=0, body=body,
-                jsonld={"@context": "https://schema.org", "@type": "WebSite", "name": SITE_NAME, "url": BASE_URL + "/",
+                jsonld={"@context": "https://schema.org", "@type": "WebSite", "name": SITE_NAME, "url": full_url(""),
                         "publisher": {"@type": "Organization", "name": "Veteran Home Guardians", "url": VHG}})
 
 
@@ -786,7 +809,7 @@ def not_found():
 def write(rel, text):
     p = DOCS / rel
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text)
+    p.write_text(fix_links(text) if rel.endswith(".html") else text)
 
 
 def to_csv(rows, header):
@@ -857,9 +880,9 @@ def main():
          "trust", "source", "source_url", "checked_on"]))
     write(f"{INDEXNOW_KEY}.txt", INDEXNOW_KEY + "\n")
     write("robots.txt", f"User-agent: *\nAllow: /\nSitemap: {BASE_URL}/sitemap.xml\n")
-    sm = "".join(f"<url><loc>{e(BASE_URL + '/' + u)}</loc></url>" for u in urls)
+    sm = "".join(f"<url><loc>{e(full_url(u))}</loc></url>" for u in urls)
     write("sitemap.xml", f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{sm}</urlset>\n')
-    write("urls.txt", "".join(f"{BASE_URL}/{u}\n" for u in urls))
+    write("urls.txt", "".join(f"{full_url(u)}\n" for u in urls))
     print(f"built {len(urls)} pages into docs/")
 
 
