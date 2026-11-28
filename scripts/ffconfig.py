@@ -8,8 +8,11 @@ from datetime import date
 SITE_NAME = "Ohio Community Events"
 BRAND_HTML = "Ohio <b>Community Events</b>"
 # Where the site is served. GitHub Pages' default address until a domain is pointed here.
-BASE_URL = os.environ.get("FF_BASE_URL", "https://travisvought-byte.github.io/findfunds")
-GOATCOUNTER_PREFIX = "/findfunds"
+BASE_URL = os.environ.get("FF_BASE_URL", "https://www.vethomeguard.org/fundraisers")
+GOATCOUNTER_PREFIX = "/fundraisers"
+# The site is served from vethomeguard.org/fundraisers. Wix caps a whole site at 20 MiB, so the full data
+# downloads stay on the GitHub Pages copy of this build (docs/), and the sync to vethomeguard leaves them out.
+DOWNLOADS_URL = os.environ.get("FF_DOWNLOADS_URL", "https://travisvought-byte.github.io/findfunds/data")
 # IndexNow key; the matching key file is written to docs/<key>.txt.
 INDEXNOW_KEY = "6f1c2b9e4a7d43c58e0b1f2a9c3d7e51"
 # Records whose season matches this are current; any other season is shown as last year's schedule.

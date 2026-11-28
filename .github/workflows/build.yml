@@ -31,7 +31,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         continue-on-error: true
         run: |
-          base="https://travisvought-byte.github.io/findfunds"
+          base="https://www.vethomeguard.org/fundraisers"
           key=$(cd scripts && python3 -c "from ffconfig import INDEXNOW_KEY; print(INDEXNOW_KEY)")
           if ! curl -fsS -o /dev/null "$base/$key.txt"; then echo "Site not live yet; skipping IndexNow."; exit 0; fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then sed "s#^$base/##" docs/urls.txt > changed.txt; else

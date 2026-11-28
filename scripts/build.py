@@ -14,7 +14,7 @@ from pathlib import Path
 import qrcode
 import qrcode.image.svg
 
-from ffconfig import (BASE_URL, BRAND_HTML, CURRENT_SEASON, FIND_BINGO_OHIO, GIVING_TUESDAY, GOATCOUNTER,
+from ffconfig import (BASE_URL, DOWNLOADS_URL, BRAND_HTML, CURRENT_SEASON, FIND_BINGO_OHIO, GIVING_TUESDAY, GOATCOUNTER,
                   GOATCOUNTER_PREFIX, INDEXNOW_KEY, KINDS, MONTHS_LONG, ONLINE_RAFFLE_SALES_ALLOWED, ORG_TYPES,
                   SITE_NAME, SUBMIT_EMAIL, TYPES, VHG, county_slug, date_list, date_span, e, is_current, long_date,
                   phone_display, phone_href, time_range)
@@ -62,7 +62,18 @@ ICONS = {
 
 
 def icon(name, cls="ic"):
-    return f'<svg class="{cls}" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">{ICONS[name]}</svg>'
+    # Each page carries one copy of each icon it uses (see sprite()); this points at it. Keeps pages small.
+    assert name in ICONS, name
+    return f'<svg class="{cls}" aria-hidden="true"><use href="#i-{name}"/></svg>'
+
+
+def sprite(html):
+    """The icons a page uses, defined once, hidden. Nothing here is read aloud."""
+    used = sorted(set(re.findall(r'<use href="#i-([a-z]+)"/>', html)))
+    if not used:
+        return ""
+    symbols = "".join(f'<symbol id="i-{n}" viewBox="0 0 24 24">{ICONS[n]}</symbol>' for n in used)
+    return f'<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">{symbols}</svg>'
 
 
 def up(depth):
@@ -95,7 +106,7 @@ def page(*, title, description, path, depth, body, jsonld=None, scripts=""):
     if jsonld:
         ld = '<script type="application/ld+json">' + json.dumps(jsonld, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/") + "</script>"
     r = up(depth)
-    return f"""<!doctype html>
+    html = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -144,6 +155,7 @@ def page(*, title, description, path, depth, body, jsonld=None, scripts=""):
 </body>
 </html>
 """
+    return html.replace("<body>\n", "<body>\n" + sprite(html) + "\n", 1)
 
 
 def type_badge(rec):
@@ -753,10 +765,11 @@ def data_page():
 <h1>Open data</h1>
 <p class="lead">Every list is free to reuse under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Please credit "{SITE_NAME}, a service of Veteran Home Guardians".</p>
 <ul>
-<li><a href="series.json">series.json</a> and <a href="series.csv">series.csv</a>: recurring events (fairs, festivals, fish fries, holiday events and more) with place, organizer, last and next dates, source and last-checked date.</li>
-<li><a href="organizers.json">organizers.json</a> and <a href="organizers.csv">organizers.csv</a>: the groups that run events, with address, phone, website, events calendar, source and last-checked date.</li>
-<li><a href="events.json">events.json</a> and <a href="events.csv">events.csv</a>: dated fish fry listings with flyers.</li>
+<li><a href="{DOWNLOADS_URL}/series.json">series.json</a> and <a href="{DOWNLOADS_URL}/series.csv">series.csv</a>: recurring events (fairs, festivals, fish fries, holiday events and more) with place, organizer, last and next dates, source and last-checked date.</li>
+<li><a href="{DOWNLOADS_URL}/organizers.json">organizers.json</a> and <a href="{DOWNLOADS_URL}/organizers.csv">organizers.csv</a>: the groups that run events, with address, phone, website, events calendar, source and last-checked date.</li>
+<li><a href="{DOWNLOADS_URL}/events.json">events.json</a> and <a href="{DOWNLOADS_URL}/events.csv">events.csv</a>: dated fish fry listings with flyers.</li>
 </ul>
+<p>The download files are served from the GitHub copy of this site.</p>
 <p>Event pages carry schema.org Event markup only for dates that are posted for the coming season. "trust" says how far a record was checked: "official_list" (from an official roster), "public_list" (from someone else's list), "organizer_page" (checked on the organizer's own site), "organizer" (confirmed by the organizer) or "claimed" (kept up to date by the organizer).</p>
 </div>"""
     return page(title=f"Open data | {SITE_NAME}", description=f"Download {SITE_NAME}'s lists of Ohio community events and organizers as JSON or CSV, free under CC BY 4.0.",
@@ -764,13 +777,10 @@ def data_page():
 
 
 def not_found():
+    # Served for any missing path, so every link is absolute.
     body = f"""<div class="wrap narrow"><h1>We couldn't find that page</h1><p>The event may have moved. <a href="{BASE_URL}/events/">Search all events</a> or <a href="{BASE_URL}/add/">tell us what you were looking for</a>.</p></div>"""
-    return page(title=f"Page not found | {SITE_NAME}", description="Page not found.", path="404.html", depth=0, body=body).replace(
-        'href="assets/', f'href="{BASE_URL}/assets/').replace('src="assets/', f'src="{BASE_URL}/assets/').replace('<a class="brand" href="">', f'<a class="brand" href="{BASE_URL}/">').replace(
-        '<a href="events/">', f'<a href="{BASE_URL}/events/">').replace('<a href="fish-fries/">', f'<a href="{BASE_URL}/fish-fries/">').replace(
-        '<a href="organizers/">', f'<a href="{BASE_URL}/organizers/">').replace('<a href="add/">', f'<a href="{BASE_URL}/add/">').replace(
-        '<a href="about/">', f'<a href="{BASE_URL}/about/">').replace('<a href="data/">', f'<a href="{BASE_URL}/data/">').replace(
-        '<a href="about/#privacy">', f'<a href="{BASE_URL}/about/#privacy">')
+    html = page(title=f"Page not found | {SITE_NAME}", description="Page not found.", path="404.html", depth=0, body=body)
+    return html.replace('href="./', f'href="{BASE_URL}/').replace('src="./', f'src="{BASE_URL}/').replace('data-zips="./', f'data-zips="{BASE_URL}/')
 
 
 def write(rel, text):
