@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
-LEAVE_OUT = {".nojekyll", "urls.txt", "data/series.json", "data/series.csv", "data/organizers.json",
+LEAVE_OUT = {".nojekyll", "data/series.json", "data/series.csv", "data/organizers.json",
              "data/organizers.csv", "data/events.json", "data/events.csv"}
 LIMIT_MIB = 17
 

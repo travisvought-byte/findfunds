@@ -37,7 +37,7 @@ CI rebuilds on every push and fails if `docs/` doesn't match the data.
 vethomeguard.org is a Wix headless site that serves the files in the `travisvought-byte/vethomeguard` repository. This site lives in its `fundraisers/` folder.
 
 1. Merge the change here. CI rebuilds `docs/` and checks it.
-2. In the vethomeguard repository, replace `fundraisers/` with a fresh copy of `docs/`, leaving out `.nojekyll`, `urls.txt` and the six download files in `data/` (all but `data/index.html` and `data/ohio-zips.json`):
+2. In the vethomeguard repository, replace `fundraisers/` with a fresh copy of `docs/`, leaving out `.nojekyll` and the six download files in `data/` (all but `data/index.html` and `data/ohio-zips.json`):
    `python3 scripts/sync_to_vhg.py ../vethomeguard` does this.
 3. Open a pull request there, merge it, and run its "Publish to Wix" workflow in publish mode.
 
