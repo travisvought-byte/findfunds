@@ -103,3 +103,4 @@ a.item-name{color:var(--navy-2)}
 h3 .ic{margin-right:.35rem}
 h2 .ic,h3 .ic{vertical-align:-.2em}
 @media (max-width:40rem){.facts-list .row{grid-template-columns:1fr}.filterform #f-q{width:100%}}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
